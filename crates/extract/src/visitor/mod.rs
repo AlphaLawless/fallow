@@ -784,8 +784,10 @@ pub fn extract_import_from_return_body<'a, 'b>(
 /// This is the shared "callable → import" peel used wherever fallow needs to
 /// look inside a deferred-loader thunk. Three shapes are accepted:
 ///
-/// - Concise arrow body: `() => import('SPEC')` — returns the import wrapped
-///   in the body's lone expression statement.
+/// - Concise arrow body: `() => import('SPEC')` — runs the body expression
+///   through [`extract_import_expression`], which also accepts the equivalent
+///   `await import('SPEC')` (under `async () => ...`) and parenthesised
+///   `(import('SPEC'))` shells.
 /// - Block arrow body: `() => { ...; return import('SPEC') }` — returns the
 ///   import from the last return statement via
 ///   [`extract_import_from_return_body`].

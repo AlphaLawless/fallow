@@ -299,8 +299,8 @@ const V6_LAZY_IMPORT_ARRAY_KEYS: &[&str] = &["commands", "providers", "preloads"
 ///   things like resolvers, controllers, services. Whatever directory is
 ///   listed must stay alive as an entry pattern. Default directories already
 ///   live in the static `ENTRY_PATTERNS`; this picks up project-specific
-///   additions (e.g. FoA's graphql playground sets `resolvers:
-///   'app/graphql/resolvers'`).
+///   additions (e.g. the FriendsOfAdonis graphql playground sets
+///   `resolvers: 'app/graphql/resolvers'`).
 /// - `package.json#imports`: Node subpath imports declared at the project
 ///   root. v6 / v7 projects use these as their primary alias mechanism
 ///   (replacing v5's rc-level `aliases`). The default scaffold ships a
@@ -669,7 +669,7 @@ mod tests {
     fn resolve_v5_ignores_non_adonisrc_filenames() {
         // The resolve_config dispatcher returns default when the filename
         // doesn't match a known rc shape. We assert it here so refactors
-        // don't silently mis-route adonisrc.ts (handled separately).
+        // don't silently misroute adonisrc.ts (handled separately).
         let plugin = AdonisPlugin;
         let result = plugin.resolve_config(
             Path::new("some-other.json"),
