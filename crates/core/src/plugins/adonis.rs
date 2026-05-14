@@ -277,11 +277,26 @@ fn resolve_v5_adonisrc(config_path: &Path, source: &str) -> PluginResult {
     result
 }
 
-/// Keys in `adonisrc.ts` whose array elements register modules via lazy imports.
-/// v6 / v7 use `() => import('SPEC')` for `commands`, `providers`, and
-/// `preloads` (and accept `{ file: () => import('SPEC'), environment: [...] }`
-/// for environment-scoped entries).
+/// Top-level keys in `adonisrc.ts` whose array elements register modules via
+/// lazy imports. v6 / v7 use `() => import('SPEC')` for `commands`,
+/// `providers`, and `preloads` (and accept
+/// `{ file: () => import('SPEC'), environment: [...] }` for
+/// environment-scoped entries).
 const V6_LAZY_IMPORT_ARRAY_KEYS: &[&str] = &["commands", "providers", "preloads"];
+
+/// Nested paths in `adonisrc.ts` whose array elements register modules via
+/// lazy imports. Adonis assembler hooks (`hooks.onBuildStarting`,
+/// `hooks.onBuildCompleted`, `hooks.onDevServerStarted`,
+/// `hooks.onSourceFileChanged`) accept the same `() => import('SPEC')` shape
+/// as the top-level arrays. Specs typically reference external packages
+/// (`@adonisjs/vite/build_hook`) or project-local hook modules
+/// (`./hooks/on_build_starting`).
+const V6_LAZY_IMPORT_NESTED_ARRAY_PATHS: &[&[&str]] = &[
+    &["hooks", "onBuildStarting"],
+    &["hooks", "onBuildCompleted"],
+    &["hooks", "onDevServerStarted"],
+    &["hooks", "onSourceFileChanged"],
+];
 
 /// Apply `adonisrc.ts` entries to the plugin result.
 ///
@@ -293,6 +308,12 @@ const V6_LAZY_IMPORT_ARRAY_KEYS: &[&str] = &["commands", "providers", "preloads"
 ///   specs (`#start/routes`) and project-relative specs map to entry
 ///   patterns. Node subpath resolution itself is set up below via
 ///   `package.json#imports`.
+/// - `hooks.onBuildStarting`, `hooks.onBuildCompleted`,
+///   `hooks.onDevServerStarted`, `hooks.onSourceFileChanged`: Adonis
+///   assembler hooks declared as arrays of the same thunk shape. Routed
+///   through the same `classify_v6_specifier` so external hook packages
+///   (`@adonisjs/vite/build_hook`) stay as referenced deps and local hook
+///   modules (`./hooks/on_build_starting`) get entry patterns.
 /// - `metaFiles[].pattern`: runtime-referenced asset globs (e.g. Edge views,
 ///   instrumentation files). Surfaced as `always_used_files`.
 /// - `directories`: project-level overrides for where the framework looks for
@@ -314,6 +335,12 @@ fn resolve_v6_adonisrc(config_path: &Path, source: &str, root: &Path) -> PluginR
 
     for key in V6_LAZY_IMPORT_ARRAY_KEYS {
         for spec in config_parser::extract_lazy_imports_in_array(source, config_path, &[key]) {
+            classify_v6_specifier(&spec, &mut result);
+        }
+    }
+
+    for path in V6_LAZY_IMPORT_NESTED_ARRAY_PATHS {
+        for spec in config_parser::extract_lazy_imports_in_array(source, config_path, path) {
             classify_v6_specifier(&spec, &mut result);
         }
     }
@@ -903,6 +930,51 @@ mod tests {
             &result,
             "app/graphql/schemas/**/*.{ts,js}"
         ));
+    }
+
+    #[test]
+    fn resolve_v6_classifies_hook_lazy_imports() {
+        // Adonis assembler hooks accept the same `() => import('SPEC')`
+        // thunk shape as commands / providers / preloads, just nested under
+        // `hooks.<name>`. External hook packages should land as referenced
+        // deps; project-local hook modules should yield entry patterns.
+        let source = r"
+            import { defineConfig } from '@adonisjs/core/app'
+
+            export default defineConfig({
+                hooks: {
+                    onBuildStarting: [
+                        () => import('@adonisjs/vite/build_hook'),
+                        () => import('./hooks/on_build_starting'),
+                    ],
+                    onBuildCompleted: [
+                        () => import('my-package/hooks/on_build_completed'),
+                    ],
+                    onDevServerStarted: [
+                        () => import('./hooks/on_dev_started'),
+                    ],
+                    onSourceFileChanged: [
+                        () => import('@scope/dev-tools/hooks/on_change'),
+                    ],
+                },
+            })
+        ";
+        let result = resolve_v6_adonisrc(rc_ts_path(), source, Path::new("/non-existent-root"));
+
+        // External hook packages routed as referenced dependencies.
+        for pkg in ["@adonisjs/vite", "my-package", "@scope/dev-tools"] {
+            assert!(
+                result.referenced_dependencies.contains(&pkg.to_string()),
+                "missing referenced hook dep: {pkg}"
+            );
+        }
+
+        // Local hook modules become entry patterns (file + directory form).
+        assert!(has_entry_pattern(
+            &result,
+            "hooks/on_build_starting.{ts,js}"
+        ));
+        assert!(has_entry_pattern(&result, "hooks/on_dev_started.{ts,js}"));
     }
 
     #[test]
