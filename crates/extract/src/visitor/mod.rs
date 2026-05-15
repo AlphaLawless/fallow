@@ -797,8 +797,8 @@ pub fn extract_import_from_return_body<'a, 'b>(
 /// Anything else (non-callable expressions, callables whose body does not
 /// terminate in a dynamic import, computed specifiers) yields `None`.
 ///
-/// Used by [`try_extract_arrow_wrapped_import`] (call-argument navigation),
-/// [`try_extract_property_callback_import`] (object-property navigation), and
+/// Used by `try_extract_arrow_wrapped_import` (call-argument navigation),
+/// `try_extract_property_callback_import` (object-property navigation), and
 /// the config-parser array-element navigation in `fallow-core`. Each caller
 /// owns its outer search; this helper owns the inner peel.
 #[must_use]
